@@ -371,7 +371,12 @@ end
 
 ---@param client vim.lsp.Client|nil
 function M.refreshSchema(client, opts)
-  opts = opts or {}
+  -- Handle Neovim LSP on_attach(client, bufnr) signature
+  if type(opts) == "number" then
+    opts = {} -- or you can allow passing bufnr explicitly if needed
+  elseif opts == nil then
+    opts = {}
+  end
   local bufnr = vim.api.nvim_get_current_buf()
 
   -- Try VSCode-style schema auto-load first
