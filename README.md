@@ -14,7 +14,7 @@ A Neovim plugin that automatically detects and applies YAML schemas for your YAM
 
 ## Prerequisites
 
-- Neovim
+- Neovim > 0.11.0
 - [yaml-language-server](https://github.com/redhat-developer/yaml-language-server)
 - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)
 
@@ -24,7 +24,7 @@ Using [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use {
-  'cwrau/yaml-schema-detect.nvim',
+  'ChristofferNissen/yaml-schema-detect.nvim',
   requires = {
     'nvim-lua/plenary.nvim',
   }
@@ -35,7 +35,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  'cwrau/yaml-schema-detect.nvim',
+  'ChristofferNissen/yaml-schema-detect.nvim',
   config = true,
   dependencies = {
     'nvim-lua/plenary.nvim',
