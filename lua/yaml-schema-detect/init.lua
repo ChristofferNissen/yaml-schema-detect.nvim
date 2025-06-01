@@ -414,6 +414,47 @@ local function cleanup()
   M.tmpFiles = {}
 end
 
+-- Add this inside lua/yaml-schema-detect/init.lua
+
+--- Load a YAML schema from a file in the current buffer's directory and apply it
+---@param schema_filename? string (optional)
+function M.load_schema_from_file(schema_filename)
+  -- Default to 'schema.json' if not provided
+  schema_filename = schema_filename or "schema.json"
+
+  -- Get the directory of the current buffer
+  local buf_path = vim.api.nvim_buf_get_name(0)
+  local dir = vim.fn.fnamemodify(buf_path, ":h")
+  local schema_path = dir .. "/" .. schema_filename
+
+  -- Check if file exists
+  local file = io.open(schema_path, "r")
+  if not file then
+    vim.notify("Schema file not found: " .. schema_path, vim.log.levels.ERROR)
+    return
+  end
+  file:close()
+
+  local schemaURI = "file://" .. schema_path
+
+  -- Apply the schema to the current buffer
+  local client = vim.lsp.get_clients({ bufnr = vim.api.nvim_get_current_buf(), name = "yamlls" })[1]
+  if client then
+    local currentBufferSelector = vim.uri_from_bufnr(vim.api.nvim_get_current_buf())
+    client.settings = vim.tbl_deep_extend("force", client.settings or {}, {
+      yaml = {
+        schemas = {
+          [schemaURI] = currentBufferSelector,
+        },
+      },
+    })
+    client:notify("workspace/didChangeConfiguration", { settings = client.settings })
+    vim.notify("Loaded YAML schema from file: " .. schema_path, vim.log.levels.INFO)
+  else
+    vim.notify("yamlls LSP client not found", vim.log.levels.ERROR)
+  end
+end
+
 function M.setup()
   vim.lsp.config("yamlls", {
     on_attach = M.refreshSchema,
@@ -437,6 +478,20 @@ function M.setup()
         vim.notify(vim.inspect(M))
       end,
       desc = "Show YAML schema info",
+    },
+  })
+  require("which-key").add({
+    {
+      "<leader>xys",
+      function()
+        -- Prompt for schema file name (optional)
+        local input = vim.fn.input("Schema file name (default: schema.json): ")
+        if input == "" then
+          input = nil
+        end
+        require("yaml-schema-detect").load_schema_from_file(input)
+      end,
+      desc = "Load YAML schema from file in current directory",
     },
   })
   vim.api.nvim_create_autocmd("VimLeavePre", {

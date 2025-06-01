@@ -11,6 +11,7 @@ A Neovim plugin that automatically detects and applies YAML schemas for your YAM
 - Buffer-specific schema management
 - Automatic fetching of Kubernetes CRD schemas from your current cluster
 - Real-time schema validation against your cluster's CRDs
+- Load schema from file
 
 ## Prerequisites
 
