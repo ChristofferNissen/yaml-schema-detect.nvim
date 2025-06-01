@@ -414,44 +414,75 @@ local function cleanup()
   M.tmpFiles = {}
 end
 
--- Add this inside lua/yaml-schema-detect/init.lua
+-- Helper to select a schema file using Telescope or vim.ui.select, then load it.
+function M.load_schema_with_picker()
+  local function apply_schema(path)
+    if not path or path == "" then
+      vim.notify("No schema selected.", vim.log.levels.WARN)
+      return
+    end
+    local schemaURI = "file://" .. path
+    local client = vim.lsp.get_clients({ bufnr = vim.api.nvim_get_current_buf(), name = "yamlls" })[1]
+    if client then
+      local currentBufferSelector = vim.uri_from_bufnr(vim.api.nvim_get_current_buf())
+      client.settings = vim.tbl_deep_extend("force", client.settings or {}, {
+        yaml = {
+          schemas = {
+            [schemaURI] = currentBufferSelector,
+          },
+        },
+      })
+      client:notify("workspace/didChangeConfiguration", { settings = client.settings })
+      vim.notify("Loaded YAML schema from: " .. path, vim.log.levels.INFO)
+    else
+      vim.notify("yamlls LSP client not found", vim.log.levels.ERROR)
+    end
+  end
 
---- Load a YAML schema from a file in the current buffer's directory and apply it
----@param schema_filename? string (optional)
-function M.load_schema_from_file(schema_filename)
-  -- Default to 'schema.json' if not provided
-  schema_filename = schema_filename or "schema.json"
-
-  -- Get the directory of the current buffer
+  -- Find all JSON/YAML files in current directory
   local buf_path = vim.api.nvim_buf_get_name(0)
   local dir = vim.fn.fnamemodify(buf_path, ":h")
-  local schema_path = dir .. "/" .. schema_filename
+  local files = {}
+  local handle = vim.loop.fs_scandir(dir)
+  if handle then
+    while true do
+      local name, type = vim.loop.fs_scandir_next(handle)
+      if not name then
+        break
+      end
+      if type == "file" and (name:match("%.json$") or name:match("%.ya?ml$")) then
+        table.insert(files, dir .. "/" .. name)
+      end
+    end
+  end
 
-  -- Check if file exists
-  local file = io.open(schema_path, "r")
-  if not file then
-    vim.notify("Schema file not found: " .. schema_path, vim.log.levels.ERROR)
+  if #files == 0 then
+    vim.notify("No JSON or YAML files found in: " .. dir, vim.log.levels.WARN)
     return
   end
-  file:close()
 
-  local schemaURI = "file://" .. schema_path
-
-  -- Apply the schema to the current buffer
-  local client = vim.lsp.get_clients({ bufnr = vim.api.nvim_get_current_buf(), name = "yamlls" })[1]
-  if client then
-    local currentBufferSelector = vim.uri_from_bufnr(vim.api.nvim_get_current_buf())
-    client.settings = vim.tbl_deep_extend("force", client.settings or {}, {
-      yaml = {
-        schemas = {
-          [schemaURI] = currentBufferSelector,
-        },
-      },
+  -- Try Telescope, else fall back to vim.ui.select
+  local ok, telescope = pcall(require, "telescope.builtin")
+  if ok then
+    telescope.find_files({
+      prompt_title = "Select a schema file",
+      cwd = dir,
+      find_command = { "fd", "--type", "f", "--extension", "json,yaml,yml" },
+      attach_mappings = function(prompt_bufnr, map)
+        local actions = require("telescope.actions")
+        local action_state = require("telescope.actions.state")
+        actions.select_default:replace(function()
+          actions.close(prompt_bufnr)
+          local selection = action_state.get_selected_entry()
+          if selection and selection[1] then
+            apply_schema(dir .. "/" .. selection[1])
+          end
+        end)
+        return true
+      end,
     })
-    client:notify("workspace/didChangeConfiguration", { settings = client.settings })
-    vim.notify("Loaded YAML schema from file: " .. schema_path, vim.log.levels.INFO)
   else
-    vim.notify("yamlls LSP client not found", vim.log.levels.ERROR)
+    vim.ui.select(files, { prompt = "Select a schema file to load" }, apply_schema)
   end
 end
 
@@ -482,16 +513,9 @@ function M.setup()
   })
   require("which-key").add({
     {
-      "<leader>xys",
-      function()
-        -- Prompt for schema file name (optional)
-        local input = vim.fn.input("Schema file name (default: schema.json): ")
-        if input == "" then
-          input = nil
-        end
-        require("yaml-schema-detect").load_schema_from_file(input)
-      end,
-      desc = "Load YAML schema from file in current directory",
+      "<leader>xyp",
+      require("yaml-schema-detect").load_schema_with_picker,
+      desc = "Pick and load YAML schema from file",
     },
   })
   vim.api.nvim_create_autocmd("VimLeavePre", {
